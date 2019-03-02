@@ -43,6 +43,7 @@ void process_cmd(char *cmdline)
         ++found;
     }
 
+    // if pipe needed
     if(found == -1) {     
         
         char **cmd;
@@ -62,13 +63,13 @@ void process_cmd(char *cmdline)
 
         // count and add the arguments
         char prev = ' ';
-        for(int i=0, temp=0, cc=0; ; i++){
+        for(int i=0, temp=1, cc=0; ; i++){
             // add argument to next
             if (cmdline[i] == '\0' || cmdline[i] == '|') {
                 args[cc] = malloc(sizeof(char*) * temp);
                 args[cc][temp-1] = NULL;
                 ++cc;
-                temp = 0;
+                temp = 1;
                 
                 if (cmdline[i] == '\0') {
                     break;
@@ -102,6 +103,9 @@ void process_cmd(char *cmdline)
                     cmd[j] = (char*)(&cmdline[i]);
                     flag = 'y';
                     prev = cmdline[i];
+
+                    args[j][k] = (char*)(&cmdline[i]);
+                    ++k;
                 }
                 // add the argument of the command
                 else {
@@ -117,13 +121,9 @@ void process_cmd(char *cmdline)
             prev = cmdline[i];
         }
 
-        printf("Command 0 : %s, args: %s\n", cmd[0], args[0][0]);
-        
-        // return;
+        // printf("Command 0 : %s, args: %s\n", cmd[0], args[0][0]);
+        // printf("Command 1 : %s, args: %s\n", cmd[1], args[1][0]);
 
-        // char cmd1[20];
-        // char cmd2[20];
-        // char argv[10];
         int pfds[2];
         pipe(pfds);
 
@@ -132,15 +132,12 @@ void process_cmd(char *cmdline)
 
         dup2(pfds[0], 0);
 
-        // sscanf(cmdline, "%s | %s %s", cmd1, cmd2, argv);
-
         pid_t pid= fork();
         
         if(pid == 0) {   // child
         
             close(1);   // close stdout
             dup2(pfds[1], 1);
-            // execlp(cmd1, cmd1, NULL);
             execvp(cmd[0], args[0]);
             
         }
@@ -151,20 +148,22 @@ void process_cmd(char *cmdline)
             close(pfds[1]);
             wait(0);
 
-
             pid_t temp = fork();
 
             if(temp==0) { // child
-                // printf("Command 1 : %s, args: %s\n", cmd[1], args[1][0]);
-                char *a[2] = {"wc", NULL};
-                char b[] = "wc";
-                execvp(b, a);
-                // execvp(cmd[1], args[1]);
+                execvp(cmd[1], args[1]);
             }
             else {  // parent
                 wait(0);
                 dup2(stdin, 0);
                 dup2(stdout, 1);
+
+                // free memory
+                for(int i=0; i<cmdcount; i++){
+                    free(args[i]);
+                }
+                free(args);
+                free(cmd);
             }        
         }
     }
