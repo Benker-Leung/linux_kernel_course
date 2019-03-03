@@ -46,88 +46,173 @@ void process_cmd(char *cmdline)
     // if pipe needed
     if(found == -1) {     
         
-        char **cmd;
+
+        char *c = cmdline;
+
+        char *temp = c; // used in checking - 
+
+
+
+
+
+        char *arg[10];
+
         char ***args;
-        int cmdcount = 1;
-
-
-        // count the commands
-        for(int i=0; cmdline[i] != '\0'; i++){
-            if (cmdline[i] == '|')
-                ++cmdcount;
-        }
-
-        
-        cmd = malloc(sizeof(char*) * cmdcount);
-        args = malloc(sizeof(char**) * cmdcount);
-
-        // count and add the arguments
-        char prev = ' ';
-        int keep = 0;
-        for(int i=0, temp=1, cc=0; ; i++){
-            // add argument to next
-            if (cmdline[i] == '\0' || cmdline[i] == '|') {
-                args[cc] = malloc(sizeof(char*) * temp);
-                args[cc][temp-1] = NULL;
-                ++cc;
-                temp = 1;
-                prev = ' ';
-                if (cmdline[i] == '\0') {
-                    break;
-                }
-                continue;
+        args = malloc(sizeof(char**) * 2);
+        for (int i=0; i<2; i++){
+            args[i] = malloc(sizeof(char*) * 10);
+            for (int j=0; j<10; j++){
+                args[i][j] = NULL;
             }
-            else if(prev == ' ' && cmdline[i] != ' ') {
-                ++temp;
-            }
-            prev = cmdline[i];
         }
         
-        prev = ' ';
-        char flag = 'n';    // n stands for not yet capture the command
-        // j is index of command, k is index of arg of that command
-        for(int i=0, j=0, k=0; ; ++i){
-            // ready to append NULL to the args to the command
-            if(cmdline[i] == '\0' || cmdline[i] == '|') {
-                flag = 'n';
-                args[j][k] = (char*)NULL;
-                k = 0;
-                ++j;
-                if(cmdline[i] == '\0') {
-                    break;
-                }
-                cmdline[i] = '\0';
-                prev = ' ';
-                continue;
-            }
-            // if prev is space and n, then 
-            else if (prev == ' ' && cmdline[i] != ' ') {
-                // add the pointer of this command
-                if(flag == 'n'){
-                    cmd[j] = (char*)(&cmdline[i]);
-                    flag = 'y';
-                    prev = cmdline[i];
+        int second;
+        int count = 0;
+        int cmd2 = 0;
+        int count_ = 0;
 
-                    args[j][k] = (char*)(&cmdline[i]);
-                    ++k;
-                }
-                // add the argument of the command
-                else {
-                    args[j][k] = (char*)&(cmdline[i]);
-                    ++k;
-                }
-            }
-            else if (cmdline[i] == ' ') {
-                prev = ' ';
-                cmdline[i] = '\0';
+
+
+
+        int command = 0;    // used in determind command got or not
+        int keep = 0;       // used for temp storage
+        int sawspace = 1;   // used for check first char
+        int len = strlen(c);// used to stop loop
+        for(int i=0; i<len ;++i) {
+            if(c[i] == '|') {
+                command = 0;
+                sawspace = 1;
+                c[i] = '\0';
                 continue;
             }
-            prev = cmdline[i];
+            else if(c[i] != ' ' && sawspace == 1){
+                if(command == 0){
+                    // printf("command addr:%d\n", i);
+
+                    arg[count++] = NULL;// terminate the first one
+                    second = count;
+                    arg[count++] = c+i;   // set command
+                    arg[count++] = c+i;   // set command
+                    ++cmd2;
+                    count_ = 0;
+                    // arr[count++] = i;
+                    command = 1;
+                    sawspace = 0;
+                    continue;
+                }
+                else{
+
+                    //steps:
+                    // 1: find the '\0' or space, if '\0' found, then stop
+                    // next
+                    // 2: (space found) next find '-', '"', '|', 'char', '\0', if '\0', stop
+                    // next
+                    // 3.1: (-| found), should create a new arg, and space before it should be '\0'
+                    // 3.2: (" found), should get next ", set i be position at "
+                    // 3.3: (c found), should get until next space
+
+
+                    // if it is -, take special care
+                    if(c[i] == '-') {
+
+                        arg[count++] = c+i;
+                        args[cmd2][count_++] = c+i;
+                        printf("Heihei:%s\n", arg[count-1]);
+                        // arr[count++] = i;
+                        // printf("arg addr:%d\n", i);
+                        keep = i;
+                        // find '\0' or ' '
+                        while(c[keep] != '\0' && c[keep] != ' ' && c[keep] != '|'){
+                            ++keep;
+                        }
+                        // if null, then can end
+                        if(c[keep] == '\0' || c[keep] == '|'){
+                            i = keep - 1;
+                            continue;
+                        }
+                        // if it is space
+                        else {
+                            // check next non-space
+                            keep += 1;
+                            while(c[keep] != '\0' && c[keep] != ' ' && c[keep] != '|' && c[keep] != '-' && c[keep] != '"'){
+                                keep += 1;
+                            }
+
+                            // stop checking
+                            if(c[keep] == '\0') {
+                                break;
+                            }
+                            // start a new arg
+                            else if(c[keep] == '-' || c[keep] == '|') {
+                                if(c[keep-1] == ' ')
+                                    c[keep-1] = '\0';
+                                i = keep - 1;
+                                continue;
+                            }
+                            // get until next "
+                            else if(c[keep] == '"') {
+                                temp = strchr(&c[keep+1], '"');
+                                // wrong syntax
+                                if(temp == NULL){
+                                    printf("Stupid syntax\n");
+                                    return;
+                                }
+                                i = temp-c;
+                                continue;
+                            }
+                            // if simple char, get next ' '
+                            else{
+                                keep += 1;
+                                while(c[keep] != ' ' && c[keep] != '\0' && c[keep] != '|'){
+                                    ++keep;
+                                }
+                                if(c[keep] == '\0' || c[keep] == '|'){
+                                    i = keep - 1;
+                                    continue;
+                                }
+                                else{
+                                    // this should set to be '\0'
+                                    i = keep - 1;
+                                    continue;
+                                }
+                            }
+
+                        }
+
+                    }
+                    else{
+                        arg[count++] = c+i;
+                        args[cmd2][count_++] = c+i;
+                        // arr[count++] = i;
+                        // printf("argument addr:%d\n", i);
+                        sawspace = 0;
+                        continue;
+                    }
+                    
+                }
+            }
+            else if(c[i] == ' '){
+                sawspace = 1;
+                c[i] = '\0';
+            }
         }
 
-        // printf("Command 0 : %s, args: %s\n", cmd[0], args[0][0]);
-        // printf("Command 1 : %s, args: %s\n", cmd[1], args[1][0]);
-
+        for(int i=0, j=0; i<count; i++){
+            if(arg[i] == NULL){
+                printf("New command:\n");
+                j = 0;
+            }
+            // command
+            else if(j==0){
+                printf("cmd:%s\n", arg[i]);
+                j = 1;
+            }
+            else{
+                printf("arg:%s\n", arg[i]);
+            }
+        }
+        arg[count++] = NULL;    // attach NULL to the last one
+        // return;
         int pfds[2];
         pipe(pfds);
 
@@ -139,14 +224,11 @@ void process_cmd(char *cmdline)
         pid_t pid= fork();
         
         if(pid == 0) {   // child
-        
-            close(1);   // close stdout
+            close(1);
             dup2(pfds[1], 1);
-            execvp(cmd[0], args[0]);
-            
+            execvp(arg[1], args[0]);
         }
         else {  //parent
-
             close(0);   // close stdin
             dup2(pfds[0], 0);
             close(pfds[1]);
@@ -155,19 +237,12 @@ void process_cmd(char *cmdline)
             pid_t temp = fork();
 
             if(temp==0) { // child
-                execvp(cmd[1], args[1]);
+                execvp(arg[second], args[1]);
             }
             else {  // parent
                 wait(0);
                 dup2(stdin, 0);
                 dup2(stdout, 1);
-
-                // free memory
-                for(int i=0; i<cmdcount; i++){
-                    free(args[i]);
-                }
-                free(args);
-                free(cmd);
             }        
         }
     }

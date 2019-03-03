@@ -13,6 +13,7 @@
 void show_prompt();
 int get_cmd_line(char *cmdline);
 void process_cmd(char *cmdline);
+void lab3_child_cmd();
 int wantToQuit(char* cmd);
 void terminate_process();
 
@@ -36,7 +37,12 @@ int main()
             int child_status;
             wait(&child_status);
             // printf("child_status: %d\n", child_status); // DEBUG
-            if(child_status != 0){
+            if(child_status == 256){
+                printf("error when executing command\n");
+                continue;
+            }
+            else if(child_status != 0){
+
                 break;
             }
         }
@@ -76,24 +82,9 @@ void process_cmd(char *cmdline)
     commands[command_count][word_count] = (char *)NULL;
     // printf("read complete\nfirst command arguments:\n"); // DEBUG
 
-    // DEBUG start
-    // for(int i = 0; i <= command_count; i++){
-    //     for(int j = 0; j < MAX_CMDLINE_LEN; j++){
-    //         if(commands[i][j] == NULL){
-    //             break;
-    //         }
-    //         printf("%s + ", commands[i][j]);
-    //     }
-    //     printf("\n");
-    // }
-    // DEBUG end
-
     if(command_count){ // pipe is present
         int pfds[2];
         pipe(pfds); // create new pipe
-        // int pfds_original[2];
-        // pfds_original[0] = dup(STDIN_FILENO); // read fd
-        // pfds_original[1] = dup(STDOUT_FILENO); // write fd
 
         pid_t pid = fork();
         if(pid == 0){ // child process
@@ -103,7 +94,12 @@ void process_cmd(char *cmdline)
             if(wantToQuit(commands[0][0])){
                 terminate_process();
             }
-            execvp(commands[0][0], commands[0]);
+            if(!strcmp(commands[0][0], "child")){
+                lab3_child_cmd(cmdline);
+            }
+            else{
+                execvp(commands[0][0], commands[0]);
+            }
             exit(0);
         }else{ // parent process
             close(STDIN_FILENO);
@@ -112,21 +108,27 @@ void process_cmd(char *cmdline)
             int child_status;
             wait(&child_status);
             if(child_status != 0){
-                exit(-1);
+                exit(-2);
             }
-            execvp(commands[1][0], commands[1]);
+            if(!strcmp(commands[1][0], "child")){
+                lab3_child_cmd(cmdline);
+            }
+            else{
+                execvp(commands[1][0], commands[1]);
+            }
             exit(0);
         }
     }else{
         if(wantToQuit(commands[0][0])){
                 terminate_process();
         }
-        execvp(commands[0][0], commands[0]); // execute commands[0]
+        if(!strcmp(commands[0][0], "child")){
+            lab3_child_cmd(cmdline);
+        }
+        else{
+            execvp(commands[0][0], commands[0]);
+        }
     }
-    
-
-    // strcpy(line, cmdline);
-	// printf("%s\n", cmdline);
 }
 
 
@@ -153,6 +155,36 @@ int get_cmd_line(char *cmdline)
         return -1;
     }
     return 0;
+}
+
+void lab3_child_cmd(char *cmdline)
+{
+    char *childCmd = strstr(cmdline, "child"); // get substring of child from cmdline
+    if (childCmd)
+    { // command is child
+        char *space = strstr(childCmd, " ");
+        if (space)
+        {
+            ++space;
+            // printf("%s\n", space);
+            pid_t pid = fork();
+            if (pid == 0)
+            { // child
+                printf("child pid %d is started\n", getpid());
+                int i = atoi(space);
+                sleep(i);
+                exit(0);
+            }
+            else
+            {
+                pid_t child_id;
+                int child_status;
+                child_id = wait(&child_status);
+                printf("child pid %d is terminated with status %d\n", child_id, child_status);
+                exit(0);
+            }
+        }
+    }
 }
 
 // support multiple language exit, including fuckyou

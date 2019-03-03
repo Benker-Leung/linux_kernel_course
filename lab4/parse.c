@@ -7,21 +7,27 @@
 
 int main(){
 
-    char cc[] = "a -b |grep -shit \"so great\"";
+    char cc[] = "ls -la | grep -e \"-lab\"";    // pretend input
 
-    char *c = (char*)malloc(strlen(cc) * sizeof(char) +1);
-    strcpy(c, cc);
 
-    char *temp;
-    temp = c;
+    char *c = cc;
 
-    int arr[10];
+    char *temp = c; // used in checking - 
+
+
+    char *arg[10];
+
+    
+    int second;
     int count = 0;
+    int cmd2 = 0;
+    int count_ = 0;
 
-    int command = 0;
-    int keep = 0;
-    int sawspace = 1;
-    int len = strlen(c);
+
+    int command = 0;    // used in determind command got or not
+    int keep = 0;       // used for temp storage
+    int sawspace = 1;   // used for check first char
+    int len = strlen(c);// used to stop loop
     for(int i=0; i<len ;++i) {
         if(c[i] == '|') {
             command = 0;
@@ -32,7 +38,14 @@ int main(){
         else if(c[i] != ' ' && sawspace == 1){
             if(command == 0){
                 // printf("command addr:%d\n", i);
-                arr[count++] = i;
+
+                arg[count++] = NULL;// terminate the first one
+                second = count;
+                arg[count++] = c+i;   // set command
+                arg[count++] = c+i;   // set command
+                ++cmd2;
+                count_ = 0;
+                // arr[count++] = i;
                 command = 1;
                 sawspace = 0;
                 continue;
@@ -51,7 +64,9 @@ int main(){
 
                 // if it is -, take special care
                 if(c[i] == '-') {
-                    arr[count++] = i;
+
+                    arg[count++] = c+i;
+                    // arr[count++] = i;
                     // printf("arg addr:%d\n", i);
                     keep = i;
                     // find '\0' or ' '
@@ -114,7 +129,8 @@ int main(){
 
                 }
                 else{
-                    arr[count++] = i;
+                    arg[count++] = c+i;
+                    // arr[count++] = i;
                     // printf("argument addr:%d\n", i);
                     sawspace = 0;
                     continue;
@@ -127,10 +143,24 @@ int main(){
             c[i] = '\0';
         }
     }
+    arg[count++] = NULL;    // attach NULL to the last one
 
-    for(int i=0; i<4; i++){
-        printf("%s\n", &c[arr[i]]);
+    for(int i=0, j=0; i<count; i++){
+        if(arg[i] == NULL){
+            printf("\n");
+            j = 0;
+        }
+        // command
+        else if(j==0){
+            printf("cmd:%s\n", arg[i]);
+            j = 1;
+        }
+        else{
+            printf("arg:%s\n", arg[i]);
+        }
     }
+    
+    // Add your testing code below
 
 
     return 0;
