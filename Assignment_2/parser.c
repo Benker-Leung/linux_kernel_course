@@ -5,26 +5,48 @@
 #include <unistd.h>
 #include <sys/types.h>
 
-int main(int argc, char* argv[]) {
 
-    char cmdline[100] = "cat myshell.c haha| grep -e \"haha yoyo yoyoyo yo\"";
+char** command = NULL;     // pointer to command locations
+char*** argument = NULL;   // pointer to argument locations
+int* argument_count = NULL;     // pointer to argument number
+int command_count = 1;  // total command
 
-    char* temp = NULL;
-    char* c = malloc(strlen((cmdline)+1) * sizeof(char));  // replace argument list in function
-    strcpy(c, cmdline);
-    char** command;     // pointer to command locations
-    char*** argument;   // pointer to argument locations
-    int* argument_count;     // pointer to argument number
 
+void freeMem() {
+    // deallocation of allocated memory
+    int i;
+
+    // free argument
+    if(argument != NULL) {
+        for(i=0; i<command_count; ++i) {
+            free(argument[i]);
+        }
+        free(argument);
+    }
+    // free command
+    if(command != NULL)
+        free(command);
+    
+    // free argument_count
+    if(argument_count != NULL)
+        free(argument_count);
+
+}
+
+int parser(char *cmdline) {
+    
+    freeMem();
+
+    char* temp = NULL;  // temp usage
+    // char* c = malloc(strlen((cmdline)+1) * sizeof(char));  // replace argument list in function
+    // strcpy(c, cmdline);
+    char *c = cmdline;
     int read_command = 0;   // indicate that command read or not
     int read_space = 0;     // indicate that space read or not
     int arg_count = 0;      // for counting argument in each command, will be set to 0 if new command reach
-
-    int command_count = 1;  // total command
     int len = strlen(c);    // length of command line
-
     int i;  // count the total command
-    int j;
+    int j;  // count command index
     for(i=0; i<len; ++i){
         if(c[i] == '|')
             ++command_count;
@@ -58,6 +80,7 @@ int main(int argc, char* argv[]) {
                     temp = strchr(c+i+1, '"');
                     if(temp == NULL) {
                         printf("Wrong syntax\n");
+                        freeMem();
                         return 0;
                     }
                     i = (temp-c)+1;
@@ -76,12 +99,6 @@ int main(int argc, char* argv[]) {
             read_space = 1;
         }
     }
-
-    for(i=0; i<command_count; ++i) {
-        printf("Command%d args:%d\n", i, argument_count[i]);
-    }
-
-
  
     // initialize the array of string pointers points to arg
     argument = calloc(command_count, sizeof(char**));
@@ -119,6 +136,7 @@ int main(int argc, char* argv[]) {
                     temp = strchr(c+i+1, '"');
                     if(temp == NULL){
                         printf("wrong syntax\n");
+                        freeMem();
                         return 0;
                     }
                     *temp = '\0';
@@ -138,21 +156,34 @@ int main(int argc, char* argv[]) {
             c[i] = '\0';
         }
     } 
+    return 1;
+}
 
-    
+
+int main(int argc, char* argv[]) {
+
+
+
+    char cmdline[100] = "cat myshell.c haha";
+    parser(cmdline);
+
+    int i;
+    int j;
+
+    printf("Total command: %d\n", command_count);
+
     for(i=0; i<command_count; ++i) {
-        for(j=0; j<argument_count[i]-1; ++j) {
+        printf("Command%d:%s\n", i, command[i]);
+    }
+    printf("\n");
+    for(i=0; i<command_count; ++i) {
+        for(j=0; j<argument_count[i]; ++j) {
             printf("Arg[%d][%d]: %s\n", i, j, argument[i][j]);
         }
         printf("\n");
-    }
+    }    
 
-    // deallocation of allocated memory
-    for(i=0; i<command_count; ++i) {
-        free(argument[i]);
-    }
-    free(command);
-    free(argument_count);
-    free(argument);
+    freeMem();
+
     return 0;
 }
