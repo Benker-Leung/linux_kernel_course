@@ -64,6 +64,8 @@ int parser(char *cmdline) {
     
     freeMem();
 
+    command_count = 1;  // total command
+
     char* temp = NULL;  // temp usage
     // char* c = malloc(strlen((cmdline)+1) * sizeof(char));  // replace argument list in function
     // strcpy(c, cmdline);
@@ -106,7 +108,7 @@ int parser(char *cmdline) {
                     // find the next "
                     temp = strchr(c+i+1, '"');
                     if(temp == NULL) {
-                        printf("Wrong syntax\n");
+                        // printf("Wrong syntax\n");
                         freeMem();
                         return 0;
                     }
@@ -162,7 +164,7 @@ int parser(char *cmdline) {
                     argument[j][arg_count++] = (char*)c+i+1;
                     temp = strchr(c+i+1, '"');
                     if(temp == NULL){
-                        printf("wrong syntax\n");
+                        // printf("wrong syntax\n");
                         freeMem();
                         return 0;
                     }
@@ -255,59 +257,90 @@ void process_cmd(char *cmdline)
     }
     // for other command
     else {
+
+
         parser(cmdline);
 
+        int i;
+        // int j;
+        // printf("%d\n", command_count);
+        // printf("%s\n", cmdline);
+        // for(i=0; i<command_count; ++i) {
+        //     for(j=0; j<argument_count[i]; ++j) {
+        //         printf("Arg[%d][%d]:%s\n", i, j, argument[i][j]);
+        //     }
+        // }
+        // return;
         int count = 0;
         pid_t pid;
 
-        int fds[2];
-        pipe(fds);
+        // create enough pipe
+        int **fds;
+        fds = calloc(command_count, sizeof(int*));
+    
+        for(i=0; i<command_count; ++i) {
+            fds[i] = calloc(2, sizeof(int));
+            pipe(fds[i]);
+        }
 
         while(command_count != count) {
             pid = fork();
             if (pid == 0) {
                 // child 
 
-                // if first one and also more than 1 command, just write without read
+                // in case of first and more than 1 command, just write without read
                 if(count == 0 && command_count != 1) {
-                    close(fds[0]);      // close read
-                    close(1);           // close stdout
-                    dup2(fds[1], 1);    // dup to stdout
-                    close(fds[1]);
-                    // fprintf(stderr, "1executing %s\n", command[count]);
+                    close(fds[count][0]);      // close curr read
+                    close(1);                  // close stdout
+                    dup2(fds[count][1], 1);    // dup to stdout
+                    // fprintf(stderr, "1 executing %s\n", command[count]);
                     execvp(command[count], argument[count]);
                 }
-                // else it does read and write to stdout
+                // in case of last or first with only one command,
+                // it does read from prev pipe and write to current pipe, stdout
                 else if (count == (command_count - 1)) {
-                    close(fds[1]);      // close write
-                    close(0);           // close stdin
-                    dup2(fds[0], 0);    // dup to stdin
-                    close(fds[0]);
-                    // fprintf(stderr, "2executing %s\n", command[count]);
+                    close(fds[count][1]);      // close curr write
+                    // if more than one command, need to dup prev pipe to stdin
+                    if(count != 0) {
+                        close(0);                    // close stdin
+                        dup2(fds[count-1][0], 0);    // dup prev pipe to stdin
+                    }
+                    // fprintf(stderr, "2 executing %d, %s\n", count, command[count]);
                     execvp(command[count], argument[count]);
                 }
-                // else it does read and write to pipe
+                // in case of middle, it does read from prev and write to curr pipe
                 else {
                     // read
-                    close(0);           // close stdin
-                    dup2(fds[0], 0);    // dup to stdin
-                    close(fds[0]);
+                    close(fds[count-1][1]);     // close curr write
+                    close(0);                   // close stdin
+                    dup2(fds[count-1][0], 0);   // dup prev pipe to stdin
                     // write
-                    close(1);           // close stdout
-                    dup2(fds[1], 1);    // dup to stdout
-                    close(fds[1]);
-                    // fprintf(stderr, "3executing %s\n", command[count]);
+                    close(fds[count][0]);       // close curr read
+                    close(1);                   // close stdout
+                    dup2(fds[count][1], 1);     // dup curr pipe to stdout
+                    // fprintf(stderr, "3 executing %s\n", command[count]);
                     execvp(command[count], argument[count]);
                 }
             }
             else {
                 // parent
-                write(fds[0], "\0", 1);
+                
+                // in case of more than one command, close the prev write pipe
+                if(count != 0) {
+                    close(fds[count-1][1]);
+                }
+                close(fds[count][1]);   // close prev write
                 wait(0);
                 // fprintf(stderr, "Parent%d\n", count);
                 ++count;
             }
         }
+
+        for(i=0; i<command_count; ++i) {
+            free(fds[i]);
+        }
+        free(fds);
+
         return;
     }
 

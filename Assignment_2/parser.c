@@ -164,7 +164,7 @@ int main(int argc, char* argv[]) {
 
 
 
-    char cmdline[100] = "cat myshell.c haha";
+    char cmdline[100] = "ls | grep \"\" | sort";
     parser(cmdline);
 
     int i;
