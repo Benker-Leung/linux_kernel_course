@@ -21,11 +21,11 @@ extern char *dirname(char *path);
 extern char *basename(char *path);
 extern char *strdup(const char *s);
 
-char *directory;
-char *base;
-char *dirc;
-char *base_;
-char *dirc_;
+char *directory = NULL;
+char *base = NULL;
+char *dirc = NULL;
+char *base_ = NULL;
+char *dirc_ = NULL;
 
 char** command = NULL;     // pointer to command locations
 char*** argument = NULL;   // pointer to argument locations
@@ -374,9 +374,18 @@ int get_cmd_line(char *cmdline)
 
 void free_all(){
 
-    printf("Freeing space...\n");
-    free(directory);
-    free(base);
-    free(dirc);
+    if(directory != NULL) {
+        free(directory);
+        directory = NULL;
+    }
+    if(base != NULL) {
+        free(base);
+        base = NULL;
+    }
+    
+    if(dirc != NULL) {
+        free(dirc);
+        dirc = NULL;
+    }    
 
 }
