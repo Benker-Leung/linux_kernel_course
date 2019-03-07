@@ -43,8 +43,6 @@ int main()
 	
 	while (1) 
 	{
-        // free memory if allocated
-        freeDir();
         // should check the pwd each loop
         directory = (char *)(get_current_dir_name());
         // get base
@@ -52,6 +50,7 @@ int main()
         // get cd .. part
         dirc = strdup(directory);
 
+        
         base_ = basename(base);
         dirc_ = dirname(dirc);
 
@@ -70,7 +69,6 @@ void process_cmd(char *cmdline)
 
     char *Exit = "exit";
     char *Child = "child";
-    char *Cd = "cd";
 
     char cmd[10];
     int time;
@@ -103,25 +101,6 @@ void process_cmd(char *cmdline)
             printf("child pid %d is terminated with status %d\n", child_pid, status);
             return;
         }
-    }
-    // for cd command
-    else if(strcmp(Cd, cmd) == 0) {
-
-        // searching start after cd
-        char *temp_path = cmdline+2;
-        // get the first non space and non \t
-        while(*temp_path != '\0' && !(*temp_path != ' ' && *temp_path != '\t')) {
-            ++temp_path;
-        }
-        // if null, should go to HOME directory
-        if(*temp_path == '\0') {
-            chdir(getenv("HOME"));
-        }
-        // else go to user define directory
-        else {
-            chdir(temp_path);
-        }
-        return;
     }
     // for other command
     else {
@@ -161,18 +140,6 @@ void process_cmd(char *cmdline)
                     close(fds[count][0]);      // close curr read
                     close(1);                  // close stdout
                     dup2(fds[count][1], 1);    // dup to stdout
-
-                    // for running curr dir file
-                    char *temp_cmd = calloc(strlen(command[count])+strlen(directory)+2, sizeof(char));
-                    strcpy(temp_cmd, directory);
-                    if(strlen(directory) != 1)
-                        *(temp_cmd+strlen(directory)) = '/';
-                    strcpy(temp_cmd+strlen(directory)+1, command[count]);
-                    execv(temp_cmd, argument[count]);
-                    
-                    // if curr dir has not such file, try run it from $PATH, and free temp
-                    free(temp_cmd);
-
                     // fprintf(stderr, "1 executing %s\n", command[count]);
                     execvp(command[count], argument[count]);
                 }
@@ -185,19 +152,6 @@ void process_cmd(char *cmdline)
                         close(0);                    // close stdin
                         dup2(fds[count-1][0], 0);    // dup prev pipe to stdin
                     }
-
-
-                    // for running curr dir file
-                    char *temp_cmd = calloc(strlen(command[count])+strlen(directory)+2, sizeof(char));
-                    strcpy(temp_cmd, directory);
-                    if(strlen(directory) != 1)
-                        *(temp_cmd+strlen(directory)) = '/';
-                    strcpy(temp_cmd+strlen(directory)+1, command[count]);
-                    execv(temp_cmd, argument[count]);
-                    
-                    // if curr dir has not such file, try run it from $PATH, and free temp
-                    free(temp_cmd);
-
                     // fprintf(stderr, "2 executing %d, %s\n", count, command[count]);
                     execvp(command[count], argument[count]);
                 }
@@ -211,24 +165,9 @@ void process_cmd(char *cmdline)
                     close(fds[count][0]);       // close curr read
                     close(1);                   // close stdout
                     dup2(fds[count][1], 1);     // dup curr pipe to stdout
-
-
-                    // for running curr dir file
-                    char *temp_cmd = calloc(strlen(command[count])+strlen(directory)+2, sizeof(char));
-                    strcpy(temp_cmd, directory);
-                    if(strlen(directory) != 1)
-                        *(temp_cmd+strlen(directory)) = '/';
-                    strcpy(temp_cmd+strlen(directory)+1, command[count]);
-                    execv(temp_cmd, argument[count]);
-                    
-                    // if curr dir has not such file, try run it from $PATH, and free temp
-                    free(temp_cmd);
-
                     // fprintf(stderr, "3 executing %s\n", command[count]);
                     execvp(command[count], argument[count]);
                 }
-                fprintf(stderr, "myshell: command not found: %s\n", command[count]);
-                exit(0);
             }
             else {
                 // parent
