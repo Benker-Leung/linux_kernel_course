@@ -148,7 +148,7 @@ void process_cmd(char *cmdline)
 
 
         CMD *cmd = parser(cmdline);
-
+        CMD *head = cmd;
         int i;
 
         int count = 0;
@@ -263,7 +263,7 @@ void process_cmd(char *cmdline)
             free(fds[i]);
         }
         free(fds);
-
+        free(head);
         return;
     }
 
