@@ -244,6 +244,7 @@ void process_cmd(char *cmdline)
             }
         }
 
+        // free fds pointer
         for(i=0; i<command_count; ++i) {
             free(fds[i]);
         }
