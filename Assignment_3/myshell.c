@@ -255,7 +255,7 @@ void process_cmd(char *cmdline)
                     free(fds[i]);
                 }
                 free(fds);
-                free(head);
+                freeCMD(head);
                 return;
             }
 
@@ -285,7 +285,7 @@ void process_cmd(char *cmdline)
         free(fds[i]);
     }
     free(fds);
-    free(head);
+    freeCMD(head);
     return;
 
 }
