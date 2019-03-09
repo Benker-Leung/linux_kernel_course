@@ -4,6 +4,7 @@
 
 #include <unistd.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 
 #define MAX_CMDLINE_LEN 256
 
@@ -37,6 +38,7 @@ void freeDir();     // free memory allocated to store directory
 void freeCMD(CMD *p);     // free memory on linked list of cmd
 void autoFillArg(CMD *p);   // auto add memory when required for arg list
 void initCMD(CMD *p);       // init cmd object
+void execfn(CMD *p);        // execute command, given command object
 int commandCount(CMD *p);   // count # of commands
 CMD* parser(char* cmdline); // return link list
 extern char* get_current_dir_name(void);
@@ -85,187 +87,206 @@ int main()
 }
 
 
+
+
+
+
+// execute function
+void execfn(CMD *cmd) {
+
+    // for exit function
+    if(strcmp(cmd->command, "exit") == 0) {
+        exit(0);
+    }
+
+    // for child [n] function, sleep
+    else if(strcmp(cmd->command, "child") == 0) {
+        int sleep_time = 0;
+        sscanf(cmd->argument_list[1], "%d", &sleep_time);
+        printf("child pid %d is started and sleep for %d seconds\n", getpid(), sleep_time);
+        sleep(sleep_time);
+        exit(0);
+    }
+    // for cd command
+    else if(strcmp(cmd->command, "cd") == 0) {
+        exit(0);
+    }
+
+
+
+    // change arugment & to NULL if any exist
+    if(strcmp(cmd->argument_list[cmd->used-1], "&") == 0) {
+        cmd->argument_list[cmd->used-1] = NULL;
+    }
+
+    // if input file is not null, then STDIN replace by it
+    if(cmd->input_file != NULL) {
+        FILE *fp = fopen(cmd->input_file, "r"); // open file
+        int f = fileno(fp);                     // get file descriptor
+
+        close(0);   // close STDIN
+        dup2(f, 0); // replace STDIN
+    }
+    if(cmd->output_file != NULL) {
+        FILE *fp = fopen(cmd->output_file, "w"); // open file
+        int f = fileno(fp);                     // get file descriptor
+
+        close(1);   // close STDOUT
+        dup2(f, 1); // replace STDOUT
+    }
+
+    // for running curr dir file
+    char *temp_cmd = calloc(strlen(cmd->command)+strlen(directory)+2, sizeof(char));
+    strcpy(temp_cmd, directory);
+    if(strlen(directory) != 1)
+        *(temp_cmd+strlen(directory)) = '/';
+    strcpy(temp_cmd+strlen(directory)+1, cmd->command);
+    execv(temp_cmd, cmd->argument_list);
+
+    // if curr dir has not such file, try run it from $PATH, and free temp
+    free(temp_cmd);
+
+    // fprintf(stderr, "1 executing %s\n", command[count]);
+    execvp(cmd->command, cmd->argument_list);
+
+}
+
+
+
+
+
+
+
 void process_cmd(char *cmdline)
 {
 
-    char *Exit = "exit";
-    char *Child = "child";
-    char *Cd = "cd";
+    CMD *cmd = parser(cmdline);
+    CMD *head = cmd;
+    int i;
 
-    char cmd[10];
-    int time;
-    int status;
-    sscanf(cmdline, "%s", cmd);
+    int count = 0;
+    pid_t pid;
 
-    // for exit command
-    if(strcmp(Exit, cmd) == 0) {
-        printf("myshell is terminated with pid %d\n", getpid());
-        freeDir();
-        exit(0);
+    // create enough pipe
+    int **fds;
+    int command_count = commandCount(cmd);
+    fds = calloc(command_count, sizeof(int*));
+
+    for(i=0; i<command_count; ++i) {
+        fds[i] = calloc(2, sizeof(int));
+        pipe(fds[i]);
     }
-    // for child command
-    else if(strcmp(Child, cmd) == 0) {
-        // get the sleep time in seconds
-        sscanf(cmdline, "child %d", &time);
-        if(time <= 0)
-            return;
 
-        pid_t pid = fork();
-        // for child pid
-        if(pid == 0) {
-            printf("child pid %d is started and sleep for %d seconds\n", getpid(), time);
-            sleep(time);
-            freeDir();
+    while(command_count != count) {
+        pid = fork();
+        if (pid == 0) {
+            // child 
+
+            // in case of first and more than 1 command, just write without read
+            if(count == 0 && command_count != 1) {
+                close(fds[count][0]);      // close curr read
+                close(1);                  // close stdout
+                dup2(fds[count][1], 1);    // dup to stdout
+                execfn(cmd);
+            }
+            // in case of last or first with only one command,
+            // it does read from prev pipe and write to current pipe, stdout
+            else if (count == (command_count - 1)) {
+                close(fds[count][1]);      // close curr write
+                // if more than one command, need to dup prev pipe to stdin
+                if(count != 0) {
+                    close(0);                    // close stdin
+                    dup2(fds[count-1][0], 0);    // dup prev pipe to stdin
+                }
+                execfn(cmd);
+            }
+            // in case of middle, it does read from prev and write to curr pipe
+            else {
+                // read
+                close(fds[count-1][1]);     // close curr write
+                close(0);                   // close stdin
+                dup2(fds[count-1][0], 0);   // dup prev pipe to stdin
+                // write
+                close(fds[count][0]);       // close curr read
+                close(1);                   // close stdout
+                dup2(fds[count][1], 1);     // dup curr pipe to stdout
+
+                execfn(cmd);
+            }
+            fprintf(stderr, "myshell: command not found: %s\n", cmd->command);
             exit(0);
         }
         else {
-            pid_t child_pid = wait(&status);
-            printf("child pid %d is terminated with status %d\n", child_pid, status);
-            return;
-        }
-    }
-    // for cd command
-    else if(strcmp(Cd, cmd) == 0) {
+            // parent
 
-        // searching start after cd
-        char *temp_path = cmdline+2;
-        // get the first non space and non \t
-        while(*temp_path != '\0' && !(*temp_path != ' ' && *temp_path != '\t')) {
-            ++temp_path;
-        }
-        // if null, should go to HOME directory
-        if(*temp_path == '\0') {
-            chdir(getenv("HOME"));
-        }
-        // else go to user define directory
-        else {
-            chdir(temp_path);
-        }
-        return;
-    }
-    // for other command
-    else {
+            // in case of more than one command, close the prev write pipe
+            if(count != 0) {
+                close(fds[count-1][1]);
+            }
+            close(fds[count][1]);   // close prev write
 
-
-        CMD *cmd = parser(cmdline);
-        CMD *head = cmd;
-        int i;
-
-        int count = 0;
-        pid_t pid;
-
-        // create enough pipe
-        int **fds;
-        int command_count = commandCount(cmd);
-        fds = calloc(command_count, sizeof(int*));
-
-        for(i=0; i<command_count; ++i) {
-            fds[i] = calloc(2, sizeof(int));
-            pipe(fds[i]);
-        }
-
-        while(command_count != count) {
-            pid = fork();
-            if (pid == 0) {
-                // child 
-
-                // in case of first and more than 1 command, just write without read
-                if(count == 0 && command_count != 1) {
-                    close(fds[count][0]);      // close curr read
-                    close(1);                  // close stdout
-                    dup2(fds[count][1], 1);    // dup to stdout
-
-                    // for running curr dir file
-                    char *temp_cmd = calloc(strlen(cmd->command)+strlen(directory)+2, sizeof(char));
-                    strcpy(temp_cmd, directory);
-                    if(strlen(directory) != 1)
-                        *(temp_cmd+strlen(directory)) = '/';
-                    strcpy(temp_cmd+strlen(directory)+1, cmd->command);
-                    execv(temp_cmd, cmd->argument_list);
-
-                    // if curr dir has not such file, try run it from $PATH, and free temp
-                    free(temp_cmd);
-
-                    // fprintf(stderr, "1 executing %s\n", command[count]);
-                    execvp(cmd->command, cmd->argument_list);
-                }
-                // in case of last or first with only one command,
-                // it does read from prev pipe and write to current pipe, stdout
-                else if (count == (command_count - 1)) {
-                    close(fds[count][1]);      // close curr write
-                    // if more than one command, need to dup prev pipe to stdin
-                    if(count != 0) {
-                        close(0);                    // close stdin
-                        dup2(fds[count-1][0], 0);    // dup prev pipe to stdin
-                    }
-
-
-                    // for running curr dir file
-                    char *temp_cmd = calloc(strlen(cmd->command)+strlen(directory)+2, sizeof(char));
-                    strcpy(temp_cmd, directory);
-                    if(strlen(directory) != 1)
-                        *(temp_cmd+strlen(directory)) = '/';
-                    strcpy(temp_cmd+strlen(directory)+1, cmd->command);
-                    execv(temp_cmd, cmd->argument_list);
-
-                    // if curr dir has not such file, try run it from $PATH, and free temp
-                    free(temp_cmd);
-
-                    // fprintf(stderr, "2 executing %d, %s\n", count, command[count]);
-                    execvp(cmd->command, cmd->argument_list);
-                }
-                // in case of middle, it does read from prev and write to curr pipe
-                else {
-                    // read
-                    close(fds[count-1][1]);     // close curr write
-                    close(0);                   // close stdin
-                    dup2(fds[count-1][0], 0);   // dup prev pipe to stdin
-                    // write
-                    close(fds[count][0]);       // close curr read
-                    close(1);                   // close stdout
-                    dup2(fds[count][1], 1);     // dup curr pipe to stdout
-
-
-                    // for running curr dir file
-                    char *temp_cmd = calloc(strlen(cmd->command)+strlen(directory)+2, sizeof(char));
-                    strcpy(temp_cmd, directory);
-                    if(strlen(directory) != 1)
-                        *(temp_cmd+strlen(directory)) = '/';
-                    strcpy(temp_cmd+strlen(directory)+1, cmd->command);
-                    execv(temp_cmd, cmd->argument_list);
-
-                    // if curr dir has not such file, try run it from $PATH, and free temp
-                    free(temp_cmd);
-
-                    // fprintf(stderr, "3 executing %s\n", command[count]);
-                    execvp(cmd->command, cmd->argument_list);
-                }
-                fprintf(stderr, "myshell: command not found: %s\n", cmd->command);
+            // if exit command, then exit
+            if(strcmp(cmd->command, "exit") == 0) {
                 exit(0);
             }
-            else {
-                // parent
+            // if cd command
+            else if(strcmp(cmd->command, "cd") == 0) {
 
-                // in case of more than one command, close the prev write pipe
-                if(count != 0) {
-                    close(fds[count-1][1]);
-                }
-                close(fds[count][1]);   // close prev write
                 wait(0);
-                // fprintf(stderr, "Parent%d\n", count);
-                ++count;
-                cmd = cmd->next;
+                // get path
+                char* temp_path = cmd->argument_list[1];
+                // if null, should go to HOME directory
+                if(temp_path == NULL) {
+                    chdir(getenv("HOME"));
+                }
+                // change to home first and then go somewhere else
+                else if(*temp_path == '~') {
+                    chdir(getenv("HOME"));
+                    if(*(temp_path+1) == '/') {
+                        chdir(temp_path+2);
+                    }
+                }
+                // else go to user define directory
+                else {
+                    chdir(temp_path);
+                }
+                // free fds pointer
+                for(i=0; i<command_count; ++i) {
+                    free(fds[i]);
+                }
+                free(fds);
+                free(head);
+                return;
             }
-        }
 
-        // free fds pointer
-        for(i=0; i<command_count; ++i) {
-            free(fds[i]);
+
+            // if last argument is not &, need to wait
+            if(strcmp(cmd->argument_list[cmd->used-1], "&") != 0) {
+                int status = 0;
+                // pid_t child_pid = wait(&status);
+                // while(child_pid != -1) {
+                //     child_pid = wait(&status);
+                // }
+                pid_t child_pid = waitpid(pid, 0, 0);
+
+                // if child function
+                if(strcmp(cmd->command, "child") == 0) 
+                    printf("child pid %d is terminated with status %d\n", child_pid, status);
+
+            }
+
+            ++count;
+            cmd = cmd->next;
         }
-        free(fds);
-        free(head);
-        return;
     }
+
+    // free fds pointer
+    for(i=0; i<command_count; ++i) {
+        free(fds[i]);
+    }
+    free(fds);
+    free(head);
+    return;
 
 }
 

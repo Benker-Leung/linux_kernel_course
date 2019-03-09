@@ -1,5 +1,0 @@
-input.txt
-myshell
-myshell.c
-test
-test.c
