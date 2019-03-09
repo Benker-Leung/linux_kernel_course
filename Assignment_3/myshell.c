@@ -437,6 +437,7 @@ CMD* parser(char* cmdline) {
                 break;
 
             case ' ':
+            case '\t':
                 c[i] = '\0';
                 prev_space = 1;
                 break;
