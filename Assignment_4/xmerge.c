@@ -53,11 +53,11 @@ SYSCALL_DEFINE2(xmerge, void*, args, size_t, argslen)
 	printk(KERN_INFO "sizeof char start [%u]\n", sizeof(char**));
 
 	// print each of the charater array address
-	for(i=0; i<xp.num_files; ++i, ++(xp.infiles)) {
+	for(i=0; i<xp.num_files; ++i) {
 
 		printk(KERN_INFO "deref:[%u]\n", xp.infiles);
 		// get value of char*
-		if(copy_from_user(&temp, xp.infiles, sizeof(char*))) {
+		if(copy_from_user(&temp, xp.infiles+i, sizeof(char*))) {
 			printk(KERN_INFO, "copying infiles[%d] fails\n", i);
 			return -EFAULT;
 		}
