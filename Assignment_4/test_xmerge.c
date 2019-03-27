@@ -1,8 +1,10 @@
+#include <stdlib.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <errno.h>
 
 #define SYSCALL_NUM_XMERGE 356
 extern int optind;
@@ -29,6 +31,8 @@ int main(int argc, char* argv[]) {
     int startOpt = 0;           // all files starting from here
     int i = 0;
     int temp = 0;
+    int defaultOflags = 1;
+    int defaultMode = 1;
     struct xmerge_param xp;
     xp.oflags = 0;
     xp.mode = 0;
@@ -38,17 +42,19 @@ int main(int argc, char* argv[]) {
     while((opt=getopt(argc, argv, "acm")) != -1) {
         switch(opt){
             case 'a':
-                // printf("got a\n");
+                printf("got a\n");
+                defaultOflags = 0;
                 xp.oflags |= O_APPEND;
                 break;
             case 'c':
-                // printf("got c\n");
+                printf("got c\n");
+                defaultOflags = 0;
                 xp.oflags |= O_CREAT;
                 break;
             case 'm':
-                // printf("got m\n");
+                printf("got m\n");
+                defaultMode = 0;
                 temp = atoi(argv[optind]);
-                printf("temp:%d\n", temp);
                 i = temp/100; temp -= i*100;
                 xp.mode |= i;
                 xp.mode <<= 3;
@@ -65,15 +71,16 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    if(xp.oflags == 0) {
-        xp.oflags = O_CREAT | O_WRONLY | O_APPEND;
+    if(defaultOflags) {
+        printf("use default oflags\n");
+        xp.oflags = O_WRONLY | O_APPEND;
     }
-    if(xp.mode == 0) {
+    if(defaultMode) {
+        printf("user default mode\n");
         xp.mode = S_IRUSR | S_IWUSR;
     }
 
     startOpt = startOpt==0?optind:startOpt;
-    printf("startOpt:[%d]\n", startOpt);
 
     if(startOpt+1 >= argc) {
         printf("Wrong length of command\n");
@@ -91,8 +98,6 @@ int main(int argc, char* argv[]) {
 
     i = syscall(SYSCALL_NUM_XMERGE, &xp, sizeof(struct xmerge_param));
 
-    printf("return:[%d]\n", i);
-
-
+    free(xp.infiles);
     return 0;
 }

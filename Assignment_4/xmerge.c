@@ -45,11 +45,16 @@ SYSCALL_DEFINE2(xmerge, void*, args, size_t, argslen)
         set_fs(get_ds());
         /* Write a loop to merge each input files */
         // open the file to write first
-        fout = ksys_open(xp.outfile, xp.oflags, xp.mode);
+        fout = ksys_open(xp.outfile, xp.oflags | O_WRONLY, 0);
+        // if file not exist
         if(fout < 0) {
-                printk(KERN_INFO "fail to open fout: [%d]\n", fout);
-                return fout;
+                fout = ksys_open(xp.outfile, O_CREAT | O_WRONLY, 0);
+                if(fout < 0) {
+                        printk(KERN_INFO "fail to open fout: [%d]\n", fout);
+                        return fout;
+                }
         }
+        
         // print each of the charater array address
         for(i=0; i<xp.num_files; ++i) {
                 // get one char* of file to read
@@ -77,6 +82,7 @@ SYSCALL_DEFINE2(xmerge, void*, args, size_t, argslen)
                 ksys_close(fin);
         }
         ksys_close(fout);
+        ksys_chmod(xp.outfile, xp.mode);
         /* After all file operations, restore the old_fs */
         set_fs(old_fs);
         printk(KERN_INFO "seems no error for this call\n");
