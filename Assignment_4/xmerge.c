@@ -19,6 +19,7 @@ SYSCALL_DEFINE2(xmerge, void*, args, size_t, argslen)
         int writeByte = 0;
         int readTemp = 0;
         int writeTemp = 0;
+        int exitCode = 0;
         int i = 0;
         int fin = -1;
         int fout = -1;
@@ -51,7 +52,8 @@ SYSCALL_DEFINE2(xmerge, void*, args, size_t, argslen)
                 fout = ksys_open(xp.outfile, O_CREAT | O_WRONLY, 0);
                 if(fout < 0) {
                         printk(KERN_INFO "fail to open fout: [%d]\n", fout);
-                        return fout;
+                        exitCode = fout;
+                        goto EXIT;
                 }
         }
         
@@ -60,13 +62,17 @@ SYSCALL_DEFINE2(xmerge, void*, args, size_t, argslen)
                 // get one char* of file to read
                 if(copy_from_user(&tempFin, xp.infiles+i, sizeof(char*))) {
                         printk(KERN_INFO "copying infiles[%d] fails\n", i);
-                        return -EFAULT;
+                        exitCode = -EFAULT;
+                        ksys_close(fout);
+                        goto EXIT;
                 }
                 // open the file to read
                 fin = ksys_open(tempFin, O_RDONLY, 0);
                 if(fin < 0) {
                         printk(KERN_INFO "fail to open fin: [%d], i:[%d]\n", fin, i);
-                        return fin;
+                        exitCode = fin;
+                        ksys_close(fout);
+                        goto EXIT;
                 }
                 memset(buf, 0, BUFSIZE);
                 // continuous read and write until read nothing
@@ -74,7 +80,9 @@ SYSCALL_DEFINE2(xmerge, void*, args, size_t, argslen)
                         writeTemp = ksys_write(fout, buf, readTemp);
                         if(writeTemp < 0) {
                                 printk(KERN_INFO "error during write\n");
-                                return writeTemp;
+                                exitCode = writeTemp;
+                                ksys_close(fout);
+                                goto EXIT;
                         }
                         writeByte += writeTemp;
                         memset(buf, 0, BUFSIZE);
@@ -83,8 +91,10 @@ SYSCALL_DEFINE2(xmerge, void*, args, size_t, argslen)
         }
         ksys_close(fout);
         ksys_chmod(xp.outfile, xp.mode);
+        exitCode = writeByte;
         /* After all file operations, restore the old_fs */
+ EXIT:
         set_fs(old_fs);
-        printk(KERN_INFO "seems no error for this call\n");
-        return writeByte;
+        printk(KERN_INFO "exit the syscall xmerge...\n");
+        return exitCode;
 }
