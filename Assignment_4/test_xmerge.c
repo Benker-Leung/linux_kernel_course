@@ -20,14 +20,22 @@ struct xmerge_param {
 
 };
 
+void printUsage(char* cmd) {
+    fprintf(stderr, "Usage: %s\t[flags] outfile infile infile2 ...\n", cmd);
+    fprintf(stderr, "\t[-a] O_APPEND flag attach\n");
+    fprintf(stderr, "\t[-c] O_CREAT flag attach\n");
+    fprintf(stderr, "\t[-m ???] change file mode bit\n");
+    return;
+}
+
 int main(int argc, char* argv[]) {
 
     if(argc < 3) {
-        fprintf(stderr, "Usage: %s [-a] [-c] [-m bits] outfile infile1 [infile2...]\n", argv[0]);
+        printUsage(argv[0]);
         exit(-1);
     }
 
-    long res = -1;                   // used to store the return value
+    long res = -1;              // used to store the return value
     int opt = 0;                // used for getopt to temp store the option char
     int startOpt = 0;           // all files starting from here (index of argv)
     int i = 0;                  // for counting
@@ -41,17 +49,18 @@ int main(int argc, char* argv[]) {
     xp.mode = 0;
     xp.num_files = 0;
     xp.ofile_count = calloc(1, sizeof(int));
+    *xp.ofile_count = 0;
 
     // parse the command
     while((opt=getopt(argc, argv, "acm")) != -1) {
         switch(opt){
             case 'a':       // append case
-                printf("append mode accepted\n");
+                // printf("append mode accepted\n");
                 defaultOflags = 0;
                 xp.oflags |= O_APPEND;
                 break;
             case 'c':       // create case
-                printf("creat mode accepted\n");
+                // printf("creat mode accepted\n");
                 defaultOflags = 0;
                 xp.oflags |= O_CREAT;
                 break;
@@ -70,25 +79,22 @@ int main(int argc, char* argv[]) {
                 }
                 defaultMode = 0;        // set to 0 indicate not to use default mode
                 startOpt = optind + 1;
-                printf("change mode of file to [%d](in integer base 10)\n", xp.mode);
+                // printf("change mode of file to [%d](in integer base 10)\n", xp.mode);
                 break;
             default:
-                fprintf(stderr, "Usage: %s\t[flags] outfile infile infile2 ...\n", argv[0]);
-                fprintf(stderr, "\t[-a] O_APPEND flag attach\n");
-                fprintf(stderr, "\t[-c] O_CREAT flag attach\n");
-                fprintf(stderr, "\t[-m ???] change file mode bit\n");
+                printUsage(argv[0]);
                 exit(-1);
         }
     }
 
     // set default oflags
     if(defaultOflags) {
-        printf("use default oflags\n");
-        xp.oflags = O_WRONLY | O_APPEND;
+        // printf("use default oflags\n");
+        xp.oflags = O_CREAT | O_WRONLY | O_APPEND;
     }
     // set default mode
     if(defaultMode) {
-        printf("user default mode\n");
+        // printf("user default mode\n");
         xp.mode = S_IRUSR | S_IWUSR;
     }
 
@@ -97,10 +103,7 @@ int main(int argc, char* argv[]) {
     // if beginning at startOpt(included), less than two argv, then quit
     if(startOpt+1 >= argc) {
         printf("Wrong length of command\n");
-        fprintf(stderr, "Usage: %s\t[flags] outfile infile infile2 ...\n", argv[0]);
-        fprintf(stderr, "\t[-a] O_APPEND flag attach\n");
-        fprintf(stderr, "\t[-c] O_CREAT flag attach\n");
-        fprintf(stderr, "\t[-m ???] change file mode bit\n");
+        printUsage(argv[0]);
         exit(-1);
     }
 
@@ -115,14 +118,22 @@ int main(int argc, char* argv[]) {
     }
 
     res = syscall(SYSCALL_NUM_XMERGE, &xp, sizeof(struct xmerge_param));
-    free(xp.infiles);
-    free(xp.ofile_count);
+    
 
     if(res < 0) {
-        printf("[xmerge error]: [%d]\n", res);
+        if(errno == EFAULT)
+            printf("[xmerge error]: Error when copying memory between user-space and kernel space\n");
+        else
+            printf("[xmerge error]: File operation problems\n");
         exit(-1);
     }
+    
+    // print syscall result
+    printf("In total, %d files have been successfully merged!\n", *xp.ofile_count);
+    printf("In total read size: %d bytes.\n", res);
 
 
+    free(xp.infiles);
+    free(xp.ofile_count);
     return 0;
 }

@@ -26,27 +26,28 @@ SYSCALL_DEFINE2(xmerge, void*, args, size_t, argslen)
         int fout = -1;                  // used for file descriptor for output file
         int ofileCount = 0;             // used for counting merged number of file
 
+        printk(KERN_INFO "the call begins\n");
 
         /* check the user_space pointers are valid */
 
         // check args(struct xmerge_param*) from user space is valid or not
         if(!access_ok(VERIFY_WRITE, args, argslen)) {
-                //args is invalid
+                printk(KERN_INFO "args is invalid\n");
                 return -EFAULT;
         }
         // copy from user to kernel of the (struct xmerge_param)
         if(copy_from_user(&xp, args, argslen)) {
-                //copying args to kernel fail
+                printk(KERN_INFO "copying args to kernel fail\n");
                 return -EFAULT;
         }
         // check char** infiles is valid or not
         if(!access_ok(VERIFY_WRITE, xp.infiles, sizeof(char*)*xp.num_files)) {
-                //infiles is invalid
+                printk(KERN_INFO "infiles is invalid\n");
                 return -EFAULT;
         }
         // check int* ofile_count is valid or not
         if(!access_ok(VERIFY_WRITE, xp.ofile_count, sizeof(int))) {
-                //infiles is invalid
+                printk(KERN_INFO "infiles is invalid\n");
                 return -EFAULT;
         }
         /* end of checking the user_space pointers */
@@ -59,23 +60,17 @@ SYSCALL_DEFINE2(xmerge, void*, args, size_t, argslen)
 
 
         // open the file to write if file exists
-        fout = ksys_open(xp.outfile, xp.oflags, 0);
+        fout = ksys_open(xp.outfile, xp.oflags | O_WRONLY, 0);
+        // if file not exist, create a new one
         if(fout < 0) {
-                // fail to open file
-                //fail to open fail
-                exitCode = fout;
-                goto EXIT;
+                fout = ksys_open(xp.outfile, O_CREAT | O_WRONLY, 0);
+                // fail to create a file
+                if(fout < 0) {
+                        printk(KERN_INFO "fail to open fout: [%d]\n", fout);
+                        exitCode = fout;
+                        goto EXIT;
+                }
         }
-        // // if file not exist, create a new one
-        // if(fout < 0) {
-        //         fout = ksys_open(xp.outfile, O_CREAT | O_WRONLY, 0);
-        //         // fail to create a file
-        //         if(fout < 0) {
-        //                 //fail to open fout
-        //                 exitCode = fout;
-        //                 goto EXIT;
-        //         }
-        // }
 
 
         /* Write a loop to merge each input files */
@@ -84,7 +79,7 @@ SYSCALL_DEFINE2(xmerge, void*, args, size_t, argslen)
                 // get one input file pointer value from user space
                 if(copy_from_user(&tempFin, xp.infiles+i, sizeof(char*))) {
                         // entered here if not correctly copy
-                        //copying infiles
+                        printk(KERN_INFO "copying infiles[%d] fails\n", i);
                         exitCode = -EFAULT;
                         goto CEXIT;
                 }
@@ -93,7 +88,7 @@ SYSCALL_DEFINE2(xmerge, void*, args, size_t, argslen)
                 
                 if(fin < 0) {
                         // entered if open fails
-                        //fail to open fin
+                        printk(KERN_INFO "fail to open fin: [%d], i:[%d]\n", fin, i);
                         exitCode = fin;
                         goto CEXIT;
                 }
@@ -105,7 +100,7 @@ SYSCALL_DEFINE2(xmerge, void*, args, size_t, argslen)
                         writeTemp = ksys_write(fout, buf, readTemp);    // record write byte this time
                         // writeTemp shouldn't be less than 0, or error happens
                         if(writeTemp < 0) {
-                                //error during write
+                                printk(KERN_INFO "error during write\n");
                                 exitCode = writeTemp;
                                 goto CEXIT;
                         }
@@ -121,7 +116,7 @@ SYSCALL_DEFINE2(xmerge, void*, args, size_t, argslen)
 
         // copy the ofile_count back to user
         if(copy_to_user(xp.ofile_count, &ofileCount, sizeof(int))) {
-                //error during copy to user
+                printk(KERN_INFO "error during copy to user\n");
                 exitCode = -EFAULT;
                 goto CEXIT;
         }
@@ -134,6 +129,6 @@ CEXIT:  // close fout and exit => CEXIT
 
 EXIT:   // restore old_fs and exit
         set_fs(old_fs);
-        //exit the syscall xmerge...
+        printk(KERN_INFO "exit the syscall xmerge...\n");
         return exitCode;
 }
