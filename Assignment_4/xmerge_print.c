@@ -61,16 +61,23 @@ SYSCALL_DEFINE2(xmerge, void*, args, size_t, argslen)
 
         // open the file to write if file exists
         fout = ksys_open(xp.outfile, xp.oflags | O_WRONLY, 0);
+
         // if file not exist, create a new one
         if(fout < 0) {
-                fout = ksys_open(xp.outfile, O_CREAT | O_WRONLY, 0);
-                // fail to create a file
-                if(fout < 0) {
-                        printk(KERN_INFO "fail to open fout: [%d]\n", fout);
-                        exitCode = fout;
-                        goto EXIT;
-                }
+                // fail to open file
+                printk(KERN_INFO "fail to open fout: [%d]\n", fout);
+                exitCode = fout;
+                goto EXIT;
         }
+        // if(fout < 0) {
+        //         fout = ksys_open(xp.outfile, O_CREAT | O_WRONLY, 0);
+        //         // fail to create a file
+        //         if(fout < 0) {
+        //                 printk(KERN_INFO "fail to open fout: [%d]\n", fout);
+        //                 exitCode = fout;
+        //                 goto EXIT;
+        //         }
+        // }
 
 
         /* Write a loop to merge each input files */
