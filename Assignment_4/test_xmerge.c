@@ -130,7 +130,7 @@ int main(int argc, char* argv[]) {
     
     // print syscall result
     printf("In total, %d files have been successfully merged!\n", *xp.ofile_count);
-    printf("In total read size: %d bytes.\n", res);
+    printf("The total read size: %d bytes.\n", res);
 
 
     free(xp.infiles);
