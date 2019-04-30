@@ -11,22 +11,28 @@
 #include <linux/ip.h>
 #include <linux/tcp.h>
 #include <linux/udp.h>
+#include <linux/jiffies.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Author's name");
 MODULE_DESCRIPTION("Drop packets based on Flow");
+
+
+extern unsigned long volatile jiffies;
+
 
 /* Step 2: Module parameters and hook operation data structure */
 static int port = 80;
 MODULE_PARM_DESC(port, "Port number. The default port is 80");
 module_param(port, int, 0644);
 
-// static int pcount = 1000;
-// MODULE_PARM_DESC(pcount, "Maximum packets allowed before dropping. The default value is 1000");
-// module_param(pcount, int, 0644);
-static int bytes_allowed = 1<<20;
-MODULE_PARM_DESC(bytes_allowed, "Maximum bytes allowed before dropping. The default value is 1MB");
-module_param(bytes_allowed, int, 0644);
+
+// static int bytes_allowed = 1<<20;
+// MODULE_PARM_DESC(bytes_allowed, "Maximum bytes allowed before dropping. The default value is 1MB");
+// module_param(bytes_allowed, int, 0644);
+static int rate = 2000;
+MODULE_PARM_DESC(rate, "Rate limit in bytes/ms. Default is 2000");
+module_param(rate, int, 0644);
 
 static struct nf_hook_ops nfho;
 
@@ -38,6 +44,9 @@ struct Flow {
     unsigned short int remote_port;
     // statistics
     unsigned int pkt_count, drop_count, byte_count, byte_drop_count;
+    // record the start jiffies of the first download
+    unsigned long volatile start_jiffies;
+    int started_download;
 };
 // FLOW_SIZE = 1<<12 = 4096
 #define FLOW_SIZE (1<<12) 
@@ -65,6 +74,8 @@ static inline void reset_flow(struct Flow *f)
         f->local_ip = f->remote_ip = 0;     
         f->pkt_count = f->drop_count = 0;   
         f->byte_count = f->byte_drop_count = 0;
+        f->start_jiffies = jiffies;
+        f->started_download = 0;
     }
 }
 
@@ -106,55 +117,45 @@ static unsigned int hook_func(void *priv,
         // Use the hash function to find the flow index
         fp = &flow_list[ hash(&f) ];
 
-        if ( tcph->fin )
+        if ( tcph->fin ) {
+
+            int t = (jiffies - fp->start_jiffies) * (1000 / HZ);
+
+            printk(KERN_INFO "[Finish rate = %d] t = %d ms, receive / drop(bytes) : %u/%u\n", rate, t, fp->byte_count, fp->byte_drop_count);
+
             reset_flow(fp); // end of TCP connection, reset flow
-        
+        }
+        // else if ( tcph->syn ) {            
+        //     reset_flow(fp);
+        // }
+
         if ( payload_len <= 0)
             return NF_ACCEPT;   // not a data packet, accept and don't do counting
-
-        // // Drop/Accept the data packet
-        // if ( fp->pkt_count >= pcount ) {
-        //     fp->drop_count++;
-        //     fp->byte_drop_count += payload_len;
-
-        //     printk(KERN_INFO "[FLOW-DROP] [%pI4:%d->%pI4:%d] payload:%d  pkts(accept/drop)  %d:%d  bytes(accept/drop) %d:%d\n",
-        //                 &f.local_ip, ntohs(f.local_port),
-        //                 &f.remote_ip, ntohs(f.remote_port),
-        //                 payload_len, fp->pkt_count, fp->drop_count,
-        //                 fp->byte_count, fp->byte_drop_count);
-        //     return NF_DROP;
-        // } else {
-        //     fp->pkt_count++;
-        //     fp->byte_count += payload_len;
-
-        //     printk(KERN_INFO "[FLOW-ACCEPT] [%pI4:%d->%pI4:%d] payload:%d  pkts(accept/drop)  %d:%d  bytes(accept/drop) %d:%d\n",
-        //                 &f.local_ip, ntohs(f.local_port),
-        //                 &f.remote_ip, ntohs(f.remote_port),
-        //                 payload_len, fp->pkt_count, fp->drop_count,
-        //                 fp->byte_count, fp->byte_drop_count);
-        //     return NF_ACCEPT;   
-        // }
         
-        // [NEW] Drop/Accept the data packet
-        if ( fp->byte_count >= bytes_allowed ) {
+        // initialize start_jiffies if not initialized
+        if(!fp->started_download) {
+            fp->started_download = 1;
+            fp->start_jiffies = jiffies;
+        }
+
+        // exceed rate, drop
+        if ( (unsigned long)rate * (unsigned long)1000 * (jiffies - fp->start_jiffies) < fp->byte_count * (unsigned long)HZ ) {
             fp->drop_count++;
             fp->byte_drop_count += payload_len;
-
-            printk(KERN_INFO "[FLOW-DROP] [%pI4:%d->%pI4:%d] payload:%d  pkts(accept/drop)  %d:%d  bytes(accept/drop) %d:%d\n",
-                        &f.local_ip, ntohs(f.local_port),
-                        &f.remote_ip, ntohs(f.remote_port),
-                        payload_len, fp->pkt_count, fp->drop_count,
-                        fp->byte_count, fp->byte_drop_count);
+            // printk(KERN_INFO "[FLOW-DROP] [%pI4:%d->%pI4:%d] payload:%d  pkts(accept/drop)  %d:%d  bytes(accept/drop) %d:%d\n",
+            //             &f.local_ip, ntohs(f.local_port),
+            //             &f.remote_ip, ntohs(f.remote_port),
+            //             payload_len, fp->pkt_count, fp->drop_count,
+            //             fp->byte_count, fp->byte_drop_count);
             return NF_DROP;
         } else {
             fp->pkt_count++;
             fp->byte_count += payload_len;
-
-            printk(KERN_INFO "[FLOW-ACCEPT] [%pI4:%d->%pI4:%d] payload:%d  pkts(accept/drop)  %d:%d  bytes(accept/drop) %d:%d\n",
-                        &f.local_ip, ntohs(f.local_port),
-                        &f.remote_ip, ntohs(f.remote_port),
-                        payload_len, fp->pkt_count, fp->drop_count,
-                        fp->byte_count, fp->byte_drop_count);
+            // printk(KERN_INFO "[FLOW-ACCEPT] [%pI4:%d->%pI4:%d] payload:%d  pkts(accept/drop)  %d:%d  bytes(accept/drop) %d:%d\n",
+            //             &f.local_ip, ntohs(f.local_port),
+            //             &f.remote_ip, ntohs(f.remote_port),
+            //             payload_len, fp->pkt_count, fp->drop_count,
+            //             fp->byte_count, fp->byte_drop_count);
             return NF_ACCEPT;   
         }
         
