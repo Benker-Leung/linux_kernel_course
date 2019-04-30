@@ -178,9 +178,19 @@ int flow_net_init_module(void)
 
 void flow_net_exit_module(void)
 {
+    int i;
+    struct Flow *fp;
+    for (i=0; i<FLOW_SIZE; i++) {
+        fp = &flow_list[i];
+        if(fp->byte_count != 0) {
+            printk(KERN_INFO "[Finish rate = %d] t = %lu ms, receive / drop(bytes) : %u/%u\n", rate, (jiffies - fp->start_jiffies) * (unsigned long)1000 / (unsigned long)HZ, fp->byte_count, fp->byte_drop_count);
+        }
+    }
+
     nf_unregister_net_hook(&init_net, &nfho);
     printk(KERN_INFO "[Exit] Flow Netfilter Module\n");
 }
 
 module_init(flow_net_init_module);
 module_exit(flow_net_exit_module);
+
