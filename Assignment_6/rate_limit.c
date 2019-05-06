@@ -20,6 +20,8 @@ MODULE_DESCRIPTION("Drop packets based on Flow");
 
 extern unsigned long volatile jiffies;
 
+// for detect overflow
+static unsigned long MAX_ULONG = -1;
 
 /* Step 2: Module parameters and hook operation data structure */
 static int port = 80;
@@ -125,7 +127,6 @@ static unsigned int hook_func(void *priv,
         }
 
 
-
         if ( payload_len <= 0)
             return NF_ACCEPT;   // not a data packet, accept and don't do counting
         
@@ -135,25 +136,31 @@ static unsigned int hook_func(void *priv,
             fp->start_jiffies = jiffies;
         }
 
-        // exceed rate, drop
-        if ( (unsigned long)rate * (unsigned long)1000 * (jiffies - fp->start_jiffies) < ((unsigned long)fp->byte_count + (unsigned long)payload_len) * (unsigned long)HZ ) {
-            fp->drop_count++;
-            fp->byte_drop_count += payload_len;
-            // printk(KERN_INFO "[FLOW-DROP] [%pI4:%d->%pI4:%d] payload:%d  pkts(accept/drop)  %d:%d  bytes(accept/drop) %d:%d\n",
-            //             &f.local_ip, ntohs(f.local_port),
-            //             &f.remote_ip, ntohs(f.remote_port),
-            //             payload_len, fp->pkt_count, fp->drop_count,
-            //             fp->byte_count, fp->byte_drop_count);
-            return NF_DROP;
-        } else {
-            fp->pkt_count++;
-            fp->byte_count += payload_len;
-            // printk(KERN_INFO "[FLOW-ACCEPT] [%pI4:%d->%pI4:%d] payload:%d  pkts(accept/drop)  %d:%d  bytes(accept/drop) %d:%d\n",
-            //             &f.local_ip, ntohs(f.local_port),
-            //             &f.remote_ip, ntohs(f.remote_port),
-            //             payload_len, fp->pkt_count, fp->drop_count,
-            //             fp->byte_count, fp->byte_drop_count);
-            return NF_ACCEPT;   
+        // if overflow happen, which is the current jiffies exceed the maximum of unsigned long
+        if(time_after(jiffies, MAX_ULONG)) {
+            // exceed rate, drop
+            if ( (unsigned long)rate * (unsigned long)1000 * (unsigned long)(jiffies + (MAX_ULONG - fp->start_jiffies)) < ((unsigned long)fp->byte_count + (unsigned long)payload_len) * (unsigned long)HZ ) {
+                fp->drop_count++;
+                fp->byte_drop_count += payload_len;
+                return NF_DROP;
+            } else {
+                fp->pkt_count++;
+                fp->byte_count += payload_len;
+                return NF_ACCEPT;
+            }
+        }
+        // if no overflow happen
+        else {
+            // exceed rate, drop
+            if ( (unsigned long)rate * (unsigned long)1000 * (unsigned long)(jiffies - fp->start_jiffies) < ((unsigned long)fp->byte_count + (unsigned long)payload_len) * (unsigned long)HZ ) {
+                fp->drop_count++;
+                fp->byte_drop_count += payload_len;
+                return NF_DROP;
+            } else {
+                fp->pkt_count++;
+                fp->byte_count += payload_len;
+                return NF_ACCEPT;
+            }
         }
         
     }
