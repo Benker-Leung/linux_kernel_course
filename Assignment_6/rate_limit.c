@@ -136,6 +136,8 @@ static unsigned int hook_func(void *priv,
             fp->start_jiffies = jiffies;
         }
 
+
+        // assumed that the user will stop at reasonable time when overflow of jiffies occur
         // if overflow happen, which is the current jiffies exceed the maximum of unsigned long
         if(time_after(jiffies, MAX_ULONG)) {
             // exceed rate, drop
