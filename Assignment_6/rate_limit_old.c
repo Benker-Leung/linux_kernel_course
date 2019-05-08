@@ -14,7 +14,7 @@
 #include <linux/jiffies.h>
 
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Benker");
+MODULE_AUTHOR("Author's name");
 MODULE_DESCRIPTION("Drop packets based on Flow");
 
 
@@ -76,7 +76,7 @@ static inline void reset_flow(struct Flow *f)
         f->local_ip = f->remote_ip = 0;     
         f->pkt_count = f->drop_count = 0;   
         f->byte_count = f->byte_drop_count = 0;
-        f->start_jiffies = 0;
+        f->start_jiffies = jiffies;
         f->started_download = 0;
     }
 }
@@ -94,7 +94,6 @@ static unsigned int hook_func(void *priv,
     struct Flow f;                      // a local flow struct
     struct Flow *fp;                    // a pointer to a flow
     unsigned int payload_len;           // TCP payload length
-	unsigned long volatile jiffies_interval;	// diff of start and curr
    
     iph = ip_hdr(skb);                  // Retrieve IP header from skb
 
@@ -122,45 +121,54 @@ static unsigned int hook_func(void *priv,
 
         if ( tcph->fin ) {
 
-			if (jiffies < fp->start_jiffies) {// overflow 
-				printk(KERN_INFO "[Finish rate = %d]\tt = %lu ms, receive / drop(bytes) : %u/%u\n", rate, (unsigned long)(jiffies + 1 + (MAX_ULONG - fp->start_jiffies)) * (unsigned long)1000 / (unsigned long)HZ, fp->byte_count, fp->byte_drop_count);
-			}
-			else { // no overflow
-				printk(KERN_INFO "[Finish rate = %d]\tt = %lu ms, receive / drop(bytes) : %u/%u\n", rate, (jiffies - fp->start_jiffies) * (unsigned long)1000 / (unsigned long)HZ, fp->byte_count, fp->byte_drop_count);
-			}
+            printk(KERN_INFO "[Finish rate = %d] t = %lu ms, receive / drop(bytes) : %u/%u\n", rate, (jiffies - fp->start_jiffies) * (unsigned long)1000 / (unsigned long)HZ, fp->byte_count, fp->byte_drop_count);
 
             reset_flow(fp); // end of TCP connection, reset flow
-
         }
 
-		// initialize start_jiffies if not initialized
-		if (!fp->started_download) {
-			fp->started_download = 1;
-			fp->start_jiffies = jiffies;
-		}
 
         if ( payload_len <= 0)
             return NF_ACCEPT;   // not a data packet, accept and don't do counting
         
-		if (jiffies < fp->start_jiffies) {	// overflow
-			jiffies_interval = (unsigned long)(jiffies + (unsigned long)1 + (MAX_ULONG - fp->start_jiffies));
-		}
-		else {	// not overflow
-			jiffies_interval = (unsigned long)(jiffies - fp->start_jiffies);
-		}
+        // initialize start_jiffies if not initialized
+        if(!fp->started_download) {
+            fp->started_download = 1;
+            fp->start_jiffies = jiffies;
+        }
 
-		// exceed rate occur, drop
-		if ((unsigned long)rate * (unsigned long)1000 * (unsigned long)(jiffies_interval) < ((unsigned long)fp->byte_count + (unsigned long)payload_len) * (unsigned long)HZ) {
-			fp->drop_count++;
-			fp->byte_drop_count += payload_len;
-			return NF_DROP;
-		}
-		// no exceed rate, accept
-		else {
-			fp->pkt_count++;
-			fp->byte_count += payload_len;
-			return NF_ACCEPT;
-		}
+
+        // assumed that the user will stop at reasonable time when overflow of jiffies occur
+        // if overflow happen, which is the current jiffies exceed the maximum of unsigned long
+        if(time_after(jiffies, MAX_ULONG)) {
+            // exceed rate, drop
+<<<<<<< HEAD
+            if ( (unsigned long)rate * (unsigned long)1000 * (unsigned long)(jiffies + 1 + (MAX_ULONG - fp->start_jiffies)) < ((unsigned long)fp->byte_count + (unsigned long)payload_len) * (unsigned long)HZ ) {
+=======
+            if ( (unsigned long)rate * (unsigned long)1000 * (unsigned long)(jiffies + (MAX_ULONG - fp->start_jiffies)) < ((unsigned long)fp->byte_count + (unsigned long)payload_len) * (unsigned long)HZ ) {
+>>>>>>> a48052a57105777a7807250b9b3e29b868e78373
+                fp->drop_count++;
+                fp->byte_drop_count += payload_len;
+                return NF_DROP;
+            } else {
+                fp->pkt_count++;
+                fp->byte_count += payload_len;
+                return NF_ACCEPT;
+            }
+        }
+        // if no overflow happen
+        else {
+            // exceed rate, drop
+            if ( (unsigned long)rate * (unsigned long)1000 * (unsigned long)(jiffies - fp->start_jiffies) < ((unsigned long)fp->byte_count + (unsigned long)payload_len) * (unsigned long)HZ ) {
+                fp->drop_count++;
+                fp->byte_drop_count += payload_len;
+                return NF_DROP;
+            } else {
+                fp->pkt_count++;
+                fp->byte_count += payload_len;
+                return NF_ACCEPT;
+            }
+        }
+        
     }
     return NF_ACCEPT; // Accept all other cases
 }
@@ -177,23 +185,23 @@ int flow_net_init_module(void)
     nfho.priority = NF_IP_PRI_FIRST;	// set to the highest priority
 
     nf_register_net_hook(&init_net, &nfho); // register hook
-    // printk(KERN_INFO "[Init] Flow Netfilter Module\n");
+    printk(KERN_INFO "[Init] Flow Netfilter Module\n");
     return 0;
 }
 
 void flow_net_exit_module(void)
 {
-    // int i;
-    // struct Flow *fp;
-    // for (i=0; i<FLOW_SIZE; i++) {
-    //     fp = &flow_list[i];
-    //     if(fp->byte_count != 0) {
-    //         printk(KERN_INFO "[Finish rate = %d] t = %lu ms, receive / drop(bytes) : %u/%u\n", rate, (jiffies - fp->start_jiffies) * (unsigned long)1000 / (unsigned long)HZ, fp->byte_count, fp->byte_drop_count);
-    //     }
-    // }
+    int i;
+    struct Flow *fp;
+    for (i=0; i<FLOW_SIZE; i++) {
+        fp = &flow_list[i];
+        if(fp->byte_count != 0) {
+            printk(KERN_INFO "[Finish rate = %d] t = %lu ms, receive / drop(bytes) : %u/%u\n", rate, (jiffies - fp->start_jiffies) * (unsigned long)1000 / (unsigned long)HZ, fp->byte_count, fp->byte_drop_count);
+        }
+    }
 
     nf_unregister_net_hook(&init_net, &nfho);
-    // printk(KERN_INFO "[Exit] Flow Netfilter Module\n");
+    printk(KERN_INFO "[Exit] Flow Netfilter Module\n");
 }
 
 module_init(flow_net_init_module);
