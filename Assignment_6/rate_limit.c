@@ -141,7 +141,11 @@ static unsigned int hook_func(void *priv,
         // if overflow happen, which is the current jiffies exceed the maximum of unsigned long
         if(time_after(jiffies, MAX_ULONG)) {
             // exceed rate, drop
+<<<<<<< HEAD
             if ( (unsigned long)rate * (unsigned long)1000 * (unsigned long)(jiffies + 1 + (MAX_ULONG - fp->start_jiffies)) < ((unsigned long)fp->byte_count + (unsigned long)payload_len) * (unsigned long)HZ ) {
+=======
+            if ( (unsigned long)rate * (unsigned long)1000 * (unsigned long)(jiffies + (MAX_ULONG - fp->start_jiffies)) < ((unsigned long)fp->byte_count + (unsigned long)payload_len) * (unsigned long)HZ ) {
+>>>>>>> a48052a57105777a7807250b9b3e29b868e78373
                 fp->drop_count++;
                 fp->byte_drop_count += payload_len;
                 return NF_DROP;
